@@ -3763,3 +3763,70 @@
 2025-12-11 12:50:55,228 - EmailAgentWithExtraction - INFO -   [EXTRACTION] Running field extraction for folder: email_attachments/3000023987/20251211_125055
 2025-12-11 12:51:37,563 - EmailAgentWithExtraction - INFO -   [EXTRACTION] Results saved to email_attachments/3000023987/20251211_125055/extraction_results.xlsx
 2025-12-11 12:52:38,467 - EmailAgentWithExtraction - INFO - [SUCCESS] Downloaded 3 attachment(s) into 1 folder(s)
+2025-12-15 22:37:01,819 - EmailAgentWithExtraction - INFO - 
+============================================================
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - EMAIL AGENT WITH FIELD EXTRACTION STARTED
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - ============================================================
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Email: yourmltales@gmail.com
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Server: imap.gmail.com:993
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Watching for subjects: IMGC Letter
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Loan ID Pattern: (\d{10})$
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Root save location: email_attachments
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Check interval: 60s
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Only unseen emails: True
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Mark as read: False
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - ============================================================
+
+2025-12-15 22:37:01,820 - EmailAgentWithExtraction - INFO - Connecting to imap.gmail.com:993...
+2025-12-15 22:37:03,608 - EmailAgentWithExtraction - INFO - [SUCCESS] Connected to imap.gmail.com
+2025-12-15 22:37:03,608 - EmailAgentWithExtraction - INFO - [2025-12-15 22:37:03] Checking emails...
+2025-12-15 22:37:13,769 - EmailAgentWithExtraction - INFO - 
+[MATCH FOUND] Subject: Fw: IMGC LETTER - Pre & FINAL IMGC Sanction for P+C in case of Mr.
+ Bhanu Pratap // Rs 12 lacs // 10.10 % // 240 months // CM Assessment//
+ Bhopal // 3000017606
+2025-12-15 22:37:13,769 - EmailAgentWithExtraction - INFO -   Loan ID: **3000017606**
+2025-12-15 22:37:13,769 - EmailAgentWithExtraction - INFO -   Folder: 3000017606/20251215_223713
+2025-12-15 22:37:13,769 - EmailAgentWithExtraction - INFO -   From: "prakhar.singh1 ." <prakhar.singh1@qualtechedge.com>
+2025-12-15 22:37:13,769 - EmailAgentWithExtraction - INFO -   Date: Mon, 15 Dec 2025 11:41:19 +0000 (UTC)
+2025-12-15 22:37:13,786 - EmailAgentWithExtraction - INFO -   [SAVED ATTACHMENT] 3000017606 IND Report.pdf (4368.2 KB)
+2025-12-15 22:37:13,787 - EmailAgentWithExtraction - INFO -   [SAVED ATTACHMENT] Application form.pdf (175.6 KB)
+2025-12-15 22:37:13,789 - EmailAgentWithExtraction - INFO -   [SAVED ATTACHMENT] CAM Report_Disbursement
+ Documents_M_22022024_062000PM.xlsx (676.1 KB)
+2025-12-15 22:37:13,790 - EmailAgentWithExtraction - INFO -   [SAVED ATTACHMENT] Legal Report.pdf (104.5 KB)
+2025-12-15 22:37:13,801 - EmailAgentWithExtraction - INFO -   [SAVED ATTACHMENT] Word.docx (2839.7 KB)
+2025-12-15 22:37:13,802 - EmailAgentWithExtraction - INFO -   [EXTRACTION] Running field extraction for folder: email_attachments/3000017606/20251215_223713
+2025-12-15 22:39:21,581 - EmailAgentWithExtraction - INFO -   [EXTRACTION] Results saved to email_attachments/3000017606/20251215_223713/extraction_results.xlsx
+2025-12-15 22:40:38,804 - EmailAgentWithExtraction - INFO - [SUCCESS] Downloaded 5 attachment(s) into 1 folder(s)
+2025-12-15 22:41:38,808 - EmailAgentWithExtraction - INFO - [2025-12-15 22:41:38] Checking emails...
+2025-12-15 22:41:40,063 - EmailAgentWithExtraction - INFO -   No new attachments
+2025-12-15 22:42:40,068 - EmailAgentWithExtraction - INFO - [2025-12-15 22:42:40] Checking emails...
+2025-12-15 22:42:40,900 - EmailAgentWithExtraction - INFO -   No new attachments
+2025-12-15 22:43:40,906 - EmailAgentWithExtraction - INFO - [2025-12-15 22:43:40] Checking emails...
+2025-12-15 22:43:43,263 - EmailAgentWithExtraction - INFO -   No new attachments
+2025-12-15 22:44:43,267 - EmailAgentWithExtraction - INFO - [2025-12-15 22:44:43] Checking emails...
+2025-12-15 22:44:43,939 - EmailAgentWithExtraction - INFO -   No new attachments
+2025-12-15 22:45:43,939 - EmailAgentWithExtraction - INFO - [2025-12-15 22:45:43] Checking emails...
+2025-12-15 22:45:44,758 - EmailAgentWithExtraction - INFO -   No new attachments
+2025-12-15 22:46:44,763 - EmailAgentWithExtraction - INFO - [2025-12-15 22:46:44] Checking emails...
+2025-12-15 22:46:45,600 - EmailAgentWithExtraction - INFO - 
+
+[STOPPED] Agent stopped by user
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - 
+============================================================
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - EMAIL AGENT - SINGLE EXECUTION MODE
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - ============================================================
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - Email: yourmltales@gmail.com
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - Server: imap.gmail.com:993
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - Watching for subjects: IMGC Letter
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - Loan ID Pattern: (\d{10})$
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - Root save location: email_attachments
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - ============================================================
+
+2025-12-15 22:46:52,020 - EmailAgentWithExtraction - INFO - Connecting to imap.gmail.com:993...
+2025-12-15 22:46:53,420 - EmailAgentWithExtraction - INFO - [SUCCESS] Connected to imap.gmail.com
+2025-12-15 22:46:53,420 - EmailAgentWithExtraction - INFO - [2025-12-15 22:46:53] Checking emails...
+2025-12-15 22:46:54,342 - EmailAgentWithExtraction - INFO - [INFO] No new attachments found
+2025-12-15 22:46:54,342 - EmailAgentWithExtraction - INFO - [COMPLETE] Single check cycle finished
+2025-12-15 22:46:55,074 - EmailAgentWithExtraction - INFO - [DISCONNECT] Logged out from server
+2025-12-15 22:46:55,075 - EmailAgentWithExtraction - INFO - [EXIT] Agent shutting down
+

@@ -1,0 +1,36 @@
+services:
+  email-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mifin-email-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Kolkata
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./email_attachments:/app/email_attachments
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+      - ./config.json:/app/config.json:ro
+      - ./FieldConfigrationFile.xlsx:/app/FieldConfigrationFile.xlsx:ro
+    networks:
+      - email-agent-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/var/log/cron.log"]
+      interval: 5m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  email-agent-network:
+    driver: bridge
