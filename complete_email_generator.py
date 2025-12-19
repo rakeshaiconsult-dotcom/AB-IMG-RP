@@ -110,11 +110,11 @@ class CompleteEmailGenerator:
     def identify_issues(self):
         print(f"[LOG] Identifying issues in extraction results")
         issues = []
-        exclude_cols = ['PAS Field Name', 'Criticality', 'First Preference', 'Second Preference']
+        exclude_cols = ['PAS Field Name', 'Mismatch Criticality', 'Criticality', 'First Preference', 'Second Preference', 'Final Data for PAS System']
         doc_columns = [col for col in self.merged_df.columns if col not in exclude_cols]
         for idx, row in self.merged_df.iterrows():
             field_name = row['PAS Field Name']
-            criticality = row.get('Criticality', 'Unknown')
+            criticality = row.get('Mismatch Criticality', row.get('Criticality', 'Unknown'))
             cleaned_values = {}
             raw_values = {}
             for col in doc_columns:
@@ -155,7 +155,7 @@ class CompleteEmailGenerator:
         if all_issues.empty:
             print(f"[LOG] No issues found")
             return all_issues
-        major_issues = all_issues[all_issues['Criticality'].str.upper() == 'HIGH']
+        major_issues = all_issues[all_issues['Criticality'].astype(str).str.upper() == 'HIGH']
         print(f"[LOG] Major issues found: {len(major_issues)}")
         return major_issues
 
@@ -165,7 +165,7 @@ class CompleteEmailGenerator:
         if all_issues.empty:
             print(f"[LOG] No issues found")
             return all_issues
-        low_issues = all_issues[all_issues['Criticality'].str.upper() != 'HIGH']
+        low_issues = all_issues[all_issues['Criticality'].astype(str).str.upper() != 'HIGH']
         print(f"[LOG] Low issues found: {len(low_issues)}")
         return low_issues
 
@@ -294,11 +294,39 @@ Return ONLY in this exact JSON format:
         print(f"[LOG] Creating Excel file with high criticality rows")
         
         # Filter for high criticality rows
-        high_crit_df = self.merged_df[self.merged_df['Criticality'].str.upper() == 'HIGH'].copy()
+        crit_col = 'Mismatch Criticality' if 'Mismatch Criticality' in self.merged_df.columns else 'Criticality'
+        high_crit_df = self.merged_df[self.merged_df[crit_col].astype(str).str.upper() == 'HIGH'].copy()
         
         if high_crit_df.empty:
             print(f"[LOG] No high criticality rows found in extraction results")
             return None
+        
+        # Re-enrich high criticality rows with all configuration metadata/description columns
+        # so the High Criticality Excel attachment contains all columns
+        try:
+            config_df = pd.read_excel(self.config_file, sheet_name='Sheet1')
+            if 'PAS Field Name' in config_df.columns and 'PAS Field Name' in high_crit_df.columns:
+                extra_cols = [
+                    'Data Type',
+                    'Field length',
+                    'Primary Source Document',
+                    'Secondary Source Document',
+                    'CAM Description',
+                    'PD Description',
+                    'PD (Word Doc) Description',
+                    'Application Form Description',
+                    'Legal Doc Description',
+                    'Technical Doc Description',
+                    'Email Subject Description',
+                    'Email Body Description',
+                ]
+                # Only use columns that actually exist in the config file
+                available_extra_cols = [c for c in extra_cols if c in config_df.columns]
+                if available_extra_cols:
+                    extra_config = config_df[['PAS Field Name'] + available_extra_cols]
+                    high_crit_df = high_crit_df.merge(extra_config, on='PAS Field Name', how='left')
+        except Exception as e:
+            print(f"[LOG] Warning: Could not enrich High Criticality Excel with config metadata: {e}")
         
         # Create filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

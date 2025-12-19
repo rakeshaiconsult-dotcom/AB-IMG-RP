@@ -197,6 +197,9 @@ def merge_results_to_excel(all_results, pas_fields, output_path, column_selectio
         print(f"  ⚠ Warning: Could not load config file for additional columns: {e}")
         config_df = None
     
+    # Determine document columns (one per processed attachment/document)
+    doc_columns = list(all_results.keys())
+
     results_data = []
     for field in pas_fields:
         row = {'PAS Field Name': field}
@@ -210,10 +213,75 @@ def merge_results_to_excel(all_results, pas_fields, output_path, column_selectio
             matching_rows = config_df[config_df['PAS Field Name'] == field]
             if not matching_rows.empty:
                 config_row = matching_rows.iloc[0]
-                # Add all other columns from the configuration file (excluding 'PAS Field Name')
+
+                # Compute Final Data for PAS System using First/Second Preference and document values
+                def _is_valid_value(value):
+                    if value is None:
+                        return False
+                    if isinstance(value, float) and pd.isna(value):
+                        return False
+                    text = str(value).strip()
+                    if not text:
+                        return False
+                    if text.upper() in {'NO INSTRUCTION', 'NOT FOUND', 'NOT PROCESSED'}:
+                        return False
+                    return True
+
+                first_pref = config_row.get('First Preference') if 'First Preference' in config_df.columns else None
+                second_pref = config_row.get('Second Preference') if 'Second Preference' in config_df.columns else None
+
+                final_value = None
+
+                # Try First Preference
+                if pd.notna(first_pref):
+                    pref_col = str(first_pref)
+                    if pref_col in doc_columns:
+                        candidate = row.get(pref_col)
+                        if _is_valid_value(candidate):
+                            final_value = candidate
+
+                # Fallback to Second Preference
+                if final_value is None and pd.notna(second_pref):
+                    pref_col = str(second_pref)
+                    if pref_col in doc_columns:
+                        candidate = row.get(pref_col)
+                        if _is_valid_value(candidate):
+                            final_value = candidate
+
+                # Fallback to first valid document value
+                if final_value is None:
+                    for col in doc_columns:
+                        candidate = row.get(col)
+                        if _is_valid_value(candidate):
+                            final_value = candidate
+                            break
+
+                row['Final Data for PAS System'] = final_value if final_value is not None else ""
+
+                # Add selected columns from the configuration file, excluding unwanted metadata/description columns
+                excluded_columns = {
+                    'Data Type',
+                    'Field length',
+                    'Primary Source Document',
+                    'Secondary Source Document',
+                    'CAM Description',
+                    'PD Description',
+                    'PD (Word Doc) Description',
+                    'Application Form Description',
+                    'Legal Doc Description',
+                    'Technical Doc Description',
+                    'Email Subject Description',
+                    'Email Body Description',
+                }
                 for col in config_df.columns:
-                    if col != 'PAS Field Name':
-                        row[col] = config_row[col] if pd.notna(config_row[col]) else ""
+                    if col == 'PAS Field Name':
+                        continue
+                    if col in excluded_columns:
+                        continue
+                    if col == 'Criticality':
+                        row['Mismatch Criticality'] = config_row[col] if pd.notna(config_row[col]) else ""
+                        continue
+                    row[col] = config_row[col] if pd.notna(config_row[col]) else ""
         
         results_data.append(row)
     
