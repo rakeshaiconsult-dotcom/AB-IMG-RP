@@ -258,6 +258,23 @@ def merge_results_to_excel(all_results, pas_fields, output_path, column_selectio
 
                 row['Final Data for PAS System'] = final_value if final_value is not None else ""
 
+                # Populate Email Subject / Email Body from extracted values of the corresponding documents
+                # based on which instruction column was selected during extraction.
+                subject_doc = next(
+                    (doc for doc, selected in column_selections.items() if selected == 'Email Subject Description' and doc in doc_columns),
+                    None,
+                )
+                body_doc = next(
+                    (doc for doc, selected in column_selections.items() if selected == 'Email Body Description' and doc in doc_columns),
+                    None,
+                )
+
+                subject_val = row.get(subject_doc) if subject_doc else None
+                body_val = row.get(body_doc) if body_doc else None
+
+                row['Email Subject'] = str(subject_val).strip() if _is_valid_value(subject_val) else ""
+                row['Email Body'] = str(body_val).strip() if _is_valid_value(body_val) else ""
+
                 # Add selected columns from the configuration file, excluding unwanted metadata/description columns
                 excluded_columns = {
                     'Data Type',
@@ -286,6 +303,26 @@ def merge_results_to_excel(all_results, pas_fields, output_path, column_selectio
         results_data.append(row)
     
     results_df = pd.DataFrame(results_data)
+
+    try:
+        required_cols = ['PAS Field Name', 'Final Data for PAS System']
+        missing_cols = [c for c in required_cols if c not in results_df.columns]
+        if missing_cols:
+            print(f"\n  ⚠ Warning: Could not write PAS JSON map. Missing columns: {missing_cols}")
+        else:
+            pas_map_df = results_df[required_cols].copy()
+            pas_map_df['PAS Field Name'] = pas_map_df['PAS Field Name'].fillna('').astype(str)
+            pas_map_df['Final Data for PAS System'] = pas_map_df['Final Data for PAS System'].fillna('').astype(str)
+            pas_map = dict(zip(pas_map_df['PAS Field Name'], pas_map_df['Final Data for PAS System']))
+
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            out_dir = os.path.dirname(output_path) or '.'
+            json_path = os.path.join(out_dir, f"pas_field_map_{ts}.json")
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(pas_map, f, indent=2, ensure_ascii=False)
+            print(f"\n✓ PAS JSON map saved to: {json_path}")
+    except Exception as e:
+        print(f"\n  ⚠ Warning: Could not write PAS JSON map: {e}")
     
     try:
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:

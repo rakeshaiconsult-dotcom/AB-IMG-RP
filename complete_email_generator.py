@@ -20,6 +20,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+import glob
 
 class CompleteEmailGenerator:
     """Complete email generator with all features and detailed logging"""
@@ -197,7 +198,7 @@ class CompleteEmailGenerator:
             formatted_text += f"{'='*70}\n"
         return formatted_text
 
-    def send_email(self, to_email, subject, body, attachment_path=None):
+    def send_email(self, to_email, subject, body, attachment_path=None, attachment_paths=None):
         print(f"[LOG] Attempting to send email to: {to_email}")
         if not self.smtp_config:
             print("[ERROR] SMTP config not loaded. Cannot send email.")
@@ -208,18 +209,30 @@ class CompleteEmailGenerator:
             msg['To'] = to_email
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'plain'))
-            if attachment_path and os.path.exists(attachment_path):
-                print(f"[LOG] Attaching file: {attachment_path}")
-                with open(attachment_path, 'rb') as attachment:
+
+            files_to_attach = []
+            if attachment_paths is not None:
+                if isinstance(attachment_paths, (list, tuple)):
+                    files_to_attach.extend(list(attachment_paths))
+                else:
+                    files_to_attach.append(attachment_paths)
+            if attachment_path is not None:
+                files_to_attach.append(attachment_path)
+
+            for path in files_to_attach:
+                if not path:
+                    continue
+                if not os.path.exists(path):
+                    print(f"[WARNING] Attachment path provided but file does not exist: {path}")
+                    continue
+                print(f"[LOG] Attaching file: {path}")
+                with open(path, 'rb') as attachment:
                     part = MIMEBase('application', 'octet-stream')
                     part.set_payload(attachment.read())
                 encoders.encode_base64(part)
-                filename = os.path.basename(attachment_path)
+                filename = os.path.basename(path)
                 part.add_header('Content-Disposition', f'attachment; filename= {filename}')
                 msg.attach(part)
-            else:
-                if attachment_path:
-                    print(f"[WARNING] Attachment path provided but file does not exist: {attachment_path}")
             print(f"[LOG] Connecting to SMTP server: {self.smtp_config['smtp_server']}:{self.smtp_config['smtp_port']}")
             server = smtplib.SMTP(self.smtp_config['smtp_server'], self.smtp_config['smtp_port'])
             server.starttls()
@@ -498,11 +511,23 @@ All fields have consistent values across all source documents.
         imgc_sent = False
         if send_emails and self.recipients.get('IMGC'):
             print(f"\n📤 Sending email to IMGC ({self.recipients['IMGC']})...")
+
+            json_candidates = []
+            try:
+                extraction_dir = os.path.dirname(str(extraction_attachment))
+                json_candidates = glob.glob(os.path.join(extraction_dir, 'pas_field_map_*.json'))
+            except Exception:
+                json_candidates = []
+
+            latest_json = max(json_candidates, key=os.path.getmtime) if json_candidates else None
+            attachments = [extraction_attachment]
+            if latest_json:
+                attachments.append(latest_json)
             imgc_sent = self.send_email(
                 to_email=self.recipients['IMGC'],
                 subject=imgc_email['subject'],
                 body=imgc_email['body'],
-                attachment_path=extraction_attachment
+                attachment_paths=attachments
             )
         
         # Summary
