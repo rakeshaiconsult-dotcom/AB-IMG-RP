@@ -14,25 +14,25 @@ import pandas as pd
 import os
 import json
 import smtplib
-from openai import OpenAI
+from openai import OpenAI,AzureOpenAI
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+from email_agent_with_extraction import llm_logger
 import glob
 
 class CompleteEmailGenerator:
     """Complete email generator with all features and detailed logging"""
-    def __init__(self, extraction_file, config_file, api_key, recipients_config, smtp_config):
+    def __init__(self, extraction_file, config_file, api_key, smtp_config):
         print(f"[LOG] Initializing CompleteEmailGenerator")
         self.extraction_file = extraction_file
         self.config_file = config_file
         self.api_key = api_key
-        self.recipients_config = recipients_config
         self.smtp_config = self.load_smtp_config(smtp_config)
-        print(f"[LOG] Loading recipients from {self.recipients_config}")
-        self.recipients = self.load_recipients()
+        print(f"[LOG] Loading recipients from {smtp_config}")
+        self.recipients = self.load_recipients_from_config(smtp_config)
         print(f"[LOG] Recipients loaded: {self.recipients}")
         print(f"[LOG] Loading extraction results from {self.extraction_file}")
         self.merged_df = self.load_extraction_results()
@@ -46,6 +46,7 @@ class CompleteEmailGenerator:
             except Exception as e:
                 print(f"[ERROR] Failed to initialize OpenAI client: {e}")
 
+
     def load_smtp_config(self, smtp_config_path):
         try:
             with open(smtp_config_path, "r") as f:
@@ -56,15 +57,16 @@ class CompleteEmailGenerator:
             print(f"[ERROR] Could not load SMTP config: {e}")
             return {}
 
-    def load_recipients(self):
+    def load_recipients_from_config(self, config_path):
         try:
-            with open(self.recipients_config, "r") as f:
-                recipients = json.load(f)
-                print(f"[LOG] Recipients file loaded: {recipients}")
-                return recipients
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                abhl = config.get("abhl_imgc", {}).get("abhl_email_id", "")
+                imgc = config.get("abhl_imgc", {}).get("imgc_email_id", "")
+                return {"ABHL": abhl, "IMGC": imgc}
         except Exception as e:
-            print(f"[ERROR] Could not load recipients: {e}")
-            return {}
+            print(f"[ERROR] Could not load recipients from config: {e}")
+            return {"ABHL": "", "IMGC": ""}
 
     def load_extraction_results(self):
         try:
@@ -209,7 +211,6 @@ class CompleteEmailGenerator:
             msg['To'] = to_email
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'plain'))
-
             files_to_attach = []
             if attachment_paths is not None:
                 if isinstance(attachment_paths, (list, tuple)):
@@ -220,19 +221,22 @@ class CompleteEmailGenerator:
                 files_to_attach.append(attachment_path)
 
             for path in files_to_attach:
-                if not path:
+                if not attachment_path:
                     continue
-                if not os.path.exists(path):
-                    print(f"[WARNING] Attachment path provided but file does not exist: {path}")
+                if not os.path.exists(attachment_path):
+                    print(f"[WARNING] Attachment path provided but file does not exist: {attachment_path}")
                     continue
-                print(f"[LOG] Attaching file: {path}")
-                with open(path, 'rb') as attachment:
+                print(f"[LOG] Attaching file: {attachment_path}")
+                with open(attachment_path, 'rb') as attachment:
                     part = MIMEBase('application', 'octet-stream')
                     part.set_payload(attachment.read())
                 encoders.encode_base64(part)
-                filename = os.path.basename(path)
+                filename = os.path.basename(attachment_path)
                 part.add_header('Content-Disposition', f'attachment; filename= {filename}')
                 msg.attach(part)
+            else:
+                if attachment_path:
+                    print(f"[WARNING] Attachment path provided but file does not exist: {attachment_path}")
             print(f"[LOG] Connecting to SMTP server: {self.smtp_config['smtp_server']}:{self.smtp_config['smtp_port']}")
             server = smtplib.SMTP(self.smtp_config['smtp_server'], self.smtp_config['smtp_port'])
             server.starttls()
@@ -276,17 +280,36 @@ Return ONLY in this exact JSON format:
 }}
 """
             print(f"[LOG] Calling GPT API...")
-            response = self.client.chat.completions.create(
+            client = AzureOpenAI(
+            azure_endpoint="https://qc-tspl-dau-mr.openai.azure.com/",
+            api_key="DvskuzopcDYytzJygTQiCl1ikUiT8513H8vfpIwVPZPOnfeHCdZ1JQQJ99BEACHYHv6XJ3w3AAABACOGprIt",
+            api_version="2025-01-01-preview",
+        )
+
+            completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a professional business email writer. Always return valid JSON."},
-                    {"role": "user", "content": prompt}
+                    {
+                    "role": "system", 
+                    "content": "You are a professional business email writer. Always return valid JSON"
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
                 ],
-                temperature=0.7,
-                max_tokens=1500
+                max_tokens=16384,
+                temperature=0.0,
+                response_format={"type": "json_object"}
             )
-            result = response.choices[0].message.content.strip()
-            print(f"[LOG] GPT response received")
+            result = completion.choices[0].message.content.strip()
+            llm_logger.info(json.dumps({
+                "model": "gpt-4o-mini",
+                "input_tokens": completion.usage.prompt_tokens,
+                "output_tokens": completion.usage.completion_tokens,
+                "prompt": prompt,
+                "response": result
+            }))
             if result.startswith("```json"):
                 result = result[7:]
             if result.endswith("```"):
@@ -511,7 +534,6 @@ All fields have consistent values across all source documents.
         imgc_sent = False
         if send_emails and self.recipients.get('IMGC'):
             print(f"\n📤 Sending email to IMGC ({self.recipients['IMGC']})...")
-
             json_candidates = []
             try:
                 extraction_dir = os.path.dirname(str(extraction_attachment))
@@ -584,7 +606,6 @@ def process_extraction_results(extraction_file, output_folder):
         extraction_file=extraction_file,
         config_file=config_file,
         api_key=api_key,
-        recipients_config=recipients_config,
         smtp_config=smtp_config
     )
     print(f"[LOG] Recipients loaded: {generator.recipients}")
