@@ -129,7 +129,6 @@ class EmailAgentWithExtractionAndEmail(EmailAgentWithExtraction):
         print(f"[DEBUG] Recipients loaded: {generator.recipients}")
         result = generator.generate_and_send_all_emails(folder_path, send_emails=True)
         print(f"[DEBUG] Email generation and sending complete for: {extraction_file}")
-
 # ...main function and config loading as in email_agent_with_extraction.py...
 
 def main():
