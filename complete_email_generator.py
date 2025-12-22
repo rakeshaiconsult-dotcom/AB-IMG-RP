@@ -454,7 +454,6 @@ For Implementation Use Only
             summary_lines = [
                 f"Dear ABHFL Team,",
                 "I hope this email finds you well.",
-                "We have processed your documents, but major discrepancies were identified during our quality check.",
                 "",
                 "We have processed your documents and below is the document captured summary",
                 "",
