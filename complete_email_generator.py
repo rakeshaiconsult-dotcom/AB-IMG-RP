@@ -422,7 +422,8 @@ Return ONLY in this exact JSON format:
         total_captured_fields = 0
         if 'Final Data for PAS System' in self.merged_df.columns:
             final_data_col = self.merged_df['Final Data for PAS System']
-            total_captured_fields = final_data_col.astype(str).str.strip().ne('').sum()
+            valid_mask = final_data_col.notna() & final_data_col.astype(str).str.strip().ne('')
+            total_captured_fields = int(valid_mask.sum())
 
         if major_issues.empty:
             body_content = f"""Dear ABHFL Team,
