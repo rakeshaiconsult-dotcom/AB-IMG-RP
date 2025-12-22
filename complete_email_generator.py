@@ -412,8 +412,17 @@ Return ONLY in this exact JSON format:
         loan_id = self._extract_loan_id()
 
         doc_names = self._get_document_names_from_mapping(mapping_json_path)
-        num_docs = len(doc_names)
-        doc_list = '\n'.join([f"• {doc}" for doc in doc_names])
+        filtered_docs = [
+            doc for doc in doc_names
+            if "mail_subject.txt" not in doc and "mail_body.txt" not in doc
+        ]
+        num_docs = len(filtered_docs)
+        doc_list = '\n'.join([f"• {doc}" for doc in filtered_docs])
+
+        total_captured_fields = 0
+        if 'Final Data for PAS System' in self.merged_df.columns:
+            final_data_col = self.merged_df['Final Data for PAS System']
+            total_captured_fields = final_data_col.astype(str).str.strip().ne('').sum()
 
         if major_issues.empty:
             body_content = f"""Dear ABHFL Team,
@@ -446,9 +455,9 @@ For Implementation Use Only
                 "I hope this email finds you well.",
                 "We have processed your documents, but major discrepancies were identified during our quality check.",
                 "",
-                "Quality Check Summary:",
-                f"• {len(major_issues)} major mismatches detected",
-                "• Revised documents or additional information may be required.",
+                "We have processed your documents and below is the document captured summary",
+                "",
+                f"Total Fields Captured : {total_captured_fields}", 
                 "",
                 "Documents Processed",
                 f"A total of {num_docs} documents were received and processed, including:",
@@ -464,7 +473,7 @@ For Implementation Use Only
                 "For Implementation Use Only"
             ]
             body_content = '\n'.join(summary_lines)
-            subject_hint = f"Loan ID: {loan_id} Loan Application Document Processing Update - Major Discrepancies Found"
+            subject_hint = f"Loan ID: {loan_id} Loan Application Document Processing Update"
 
         email = {
             'subject': subject_hint,
@@ -478,10 +487,14 @@ For Implementation Use Only
         loan_id = self._extract_loan_id()
         print("IMGC Loan Id:", loan_id)
         doc_names = self._get_document_names_from_mapping(mapping_json_path)
-        num_docs = len(doc_names)
+        filtered_docs = [
+            doc for doc in doc_names
+            if "mail_subject.txt" not in doc and "mail_body.txt" not in doc
+        ]
+        num_docs = len(filtered_docs)
         print("IMGC JSON path:",mapping_json_path)
         print("IMGC doc_names:",doc_names)
-        doc_list = '\n'.join([f"• {doc}" for doc in doc_names])
+        doc_list = '\n'.join([f"• {doc}" for doc in filtered_docs])
 
         # Extraction statistics
         total_fields = len(self.merged_df)
@@ -495,7 +508,6 @@ For Implementation Use Only
         subject = f"ABHFL – Loan ID: {loan_id} – Document Data Extraction Report with Criticality Analysis"
         body = f"""Dear IMGC Team,
 
-Subject - ABHFL – Loan ID: {loan_id} – Document Data Extraction Report with Criticality Analysis
 I hope you are doing well.
 A total of {num_docs} loan-related documents were received and successfully processed as part of this request. The documents include:
 {doc_list}
