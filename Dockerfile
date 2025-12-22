@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . .
 
-RUN chmod +x /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 RUN mkdir -p /app/email_attachments /app/output && \
     chmod -R 755 /app/email_attachments /app/output
