@@ -1206,12 +1206,10 @@ class EmailAgentWithExtraction:
                     logger=self.logger
                 )
                 
-                # Always register the document so it becomes a column in the Excel output,
-                # even if no fields were extracted (extracted_data may be empty).
-                all_results[doc_name] = extracted_data or {}
-                column_selections[doc_name] = matched_column
-                self.logger.info(f"    [EXTRACTION] ✓ Extracted {len(extracted_data)} fields using column: {matched_column}")
-            
+                if extracted_data:
+                    all_results[doc_name] = extracted_data
+                    column_selections[doc_name] = matched_column
+                    self.logger.info(f"    [EXTRACTION] ✓ Extracted {len(extracted_data)} fields using column: {matched_column}")
             # Save results
             if all_results:
                 print(all_results)
