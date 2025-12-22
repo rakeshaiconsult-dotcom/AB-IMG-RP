@@ -26,10 +26,6 @@ RUN mkdir -p /app/email_attachments /app/output && \
 RUN touch /var/log/cron.log && \
     chmod 0644 /var/log/cron.log
 
-RUN echo "*/30 * * * * cd /app && /usr/local/bin/python /app/main.py --once >> /var/log/cron.log 2>&1" > /etc/cron.d/email-agent-cron && \
-    chmod 0644 /etc/cron.d/email-agent-cron && \
-    crontab /etc/cron.d/email-agent-cron
-
 ENV PYTHONUNBUFFERED=1
 ENV TZ=Asia/Kolkata
 

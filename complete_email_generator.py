@@ -14,14 +14,26 @@ import pandas as pd
 import os
 import json
 import smtplib
+import shutil
 from openai import OpenAI,AzureOpenAI
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-from email_agent_with_extraction import llm_logger
+# from email_agent_with_extraction import llm_logger
 import glob
+
+
+def _ensure_txt_copy_for_attachment(source_path: str) -> str:
+    base, _ = os.path.splitext(source_path)
+    txt_path = base + ".txt"
+    try:
+        if (not os.path.exists(txt_path)) or (os.path.getmtime(txt_path) < os.path.getmtime(source_path)):
+            shutil.copyfile(source_path, txt_path)
+    except Exception:
+        return source_path
+    return txt_path
 
 class CompleteEmailGenerator:
     """Complete email generator with all features and detailed logging"""
@@ -79,13 +91,13 @@ class CompleteEmailGenerator:
 
     def _clean_value(self, val):
         if val is None:
-            print(f"[LOG] Cleaning value: None -> ''")
+            #print(f"[LOG] Cleaning value: None -> ''")
             return ""
         if isinstance(val, float) and pd.isna(val):
-            print(f"[LOG] Cleaning value: NaN -> ''")
+            #print(f"[LOG] Cleaning value: NaN -> ''")
             return ""
         cleaned = str(val).strip().lower()
-        print(f"[LOG] Cleaning value: {val} -> {cleaned}")
+        #print(f"[LOG] Cleaning value: {val} -> {cleaned}")
         return cleaned
 
     def _get_preferred_value(self, row, doc_columns):
@@ -208,7 +220,12 @@ class CompleteEmailGenerator:
         try:
             msg = MIMEMultipart()
             msg['From'] = self.smtp_config['address']
-            msg['To'] = to_email
+            if isinstance(to_email, (list, tuple)):
+                msg['To'] = ', '.join(to_email)
+                recipients = list(to_email)
+            else:
+                msg['To'] = to_email
+                recipients = [to_email]
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'plain'))
             files_to_attach = []
@@ -221,17 +238,17 @@ class CompleteEmailGenerator:
                 files_to_attach.append(attachment_path)
 
             for path in files_to_attach:
-                if not attachment_path:
+                if not path:
                     continue
-                if not os.path.exists(attachment_path):
-                    print(f"[WARNING] Attachment path provided but file does not exist: {attachment_path}")
+                if not os.path.exists(path):
+                    print(f"[WARNING] Attachment path provided but file does not exist: {path}")
                     continue
-                print(f"[LOG] Attaching file: {attachment_path}")
-                with open(attachment_path, 'rb') as attachment:
+                print(f"[LOG] Attaching file: {path}")
+                with open(path, 'rb') as attachment:
                     part = MIMEBase('application', 'octet-stream')
                     part.set_payload(attachment.read())
                 encoders.encode_base64(part)
-                filename = os.path.basename(attachment_path)
+                filename = os.path.basename(path)
                 part.add_header('Content-Disposition', f'attachment; filename= {filename}')
                 msg.attach(part)
             else:
@@ -243,9 +260,9 @@ class CompleteEmailGenerator:
             print(f"[LOG] Logging in with email: {self.smtp_config['address']}")
             server.login(self.smtp_config['address'], self.smtp_config['password'])
             text = msg.as_string()
-            server.sendmail(self.smtp_config['address'], to_email, text)
+            server.sendmail(self.smtp_config['address'], recipients, text)
             server.quit()
-            print(f"[LOG] ✅ Email sent successfully to {to_email}")
+            print(f"[LOG] ✅ Email sent successfully to {recipients}")
             return True
         except Exception as e:
             print(f"[ERROR] Failed to send email: {e}")
@@ -325,164 +342,181 @@ Return ONLY in this exact JSON format:
                 'body': body_content
             }
 
-    def create_high_criticality_excel(self, output_folder):
-        """Create an Excel file containing only high criticality rows from extraction results"""
-        print(f"[LOG] Creating Excel file with high criticality rows")
-        
-        # Filter for high criticality rows
-        crit_col = 'Mismatch Criticality' if 'Mismatch Criticality' in self.merged_df.columns else 'Criticality'
-        high_crit_df = self.merged_df[self.merged_df[crit_col].astype(str).str.upper() == 'HIGH'].copy()
-        
-        if high_crit_df.empty:
-            print(f"[LOG] No high criticality rows found in extraction results")
-            return None
-        
-        # Re-enrich high criticality rows with all configuration metadata/description columns
-        # so the High Criticality Excel attachment contains all columns
-        try:
-            config_df = pd.read_excel(self.config_file, sheet_name='Sheet1')
-            if 'PAS Field Name' in config_df.columns and 'PAS Field Name' in high_crit_df.columns:
-                extra_cols = [
-                    'Data Type',
-                    'Field length',
-                    'Primary Source Document',
-                    'Secondary Source Document',
-                    'CAM Description',
-                    'PD Description',
-                    'PD (Word Doc) Description',
-                    'Application Form Description',
-                    'Legal Doc Description',
-                    'Technical Doc Description',
-                    'Email Subject Description',
-                    'Email Body Description',
-                ]
-                # Only use columns that actually exist in the config file
-                available_extra_cols = [c for c in extra_cols if c in config_df.columns]
-                if available_extra_cols:
-                    extra_config = config_df[['PAS Field Name'] + available_extra_cols]
-                    high_crit_df = high_crit_df.merge(extra_config, on='PAS Field Name', how='left')
-        except Exception as e:
-            print(f"[LOG] Warning: Could not enrich High Criticality Excel with config metadata: {e}")
-        
-        # Create filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = os.path.join(output_folder, f"High_Criticality_Issues_{timestamp}.xlsx")
-        
-        # Save to Excel
-        high_crit_df.to_excel(filename, index=False)
-        print(f"[LOG] High criticality Excel file created: {filename}")
-        print(f"[LOG] Rows in high criticality file: {len(high_crit_df)}")
-        
+    # def create_high_criticality_excel(self, output_folder):
+    #     """Create an Excel file containing only high criticality rows, with filtered columns."""
+    #     print(f"[LOG] Creating Excel file with high criticality rows")
+    #     crit_col = 'Mismatch Criticality' if 'Mismatch Criticality' in self.merged_df.columns else 'Criticality'
+    #     high_crit_df = self.merged_df[self.merged_df[crit_col].astype(str).str.upper() == 'HIGH'].copy()
+
+    #     if high_crit_df.empty:
+    #         print("[LOG] No high criticality rows found.")
+    #         return None
+
+    #     # Load config to get all columns
+    #     config_df = pd.read_excel(self.config_file)
+    #     all_columns = config_df.columns.tolist()
+
+    #     # Columns to exclude
+    #     exclude_keywords = ['Data Type', 'Field length', 'Primary Source Document', 'Secondary Source Document']
+    #     exclude_columns = [col for col in all_columns if any(key in col for key in exclude_keywords) or 'Description' in col]
+
+    #     # Columns to keep
+    #     keep_columns = [col for col in all_columns if col not in exclude_columns]
+
+    #     # Reorder and filter columns
+    #     filtered_df = high_crit_df.reindex(columns=keep_columns)
+
+    #     # Create filename with timestamp
+    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #     filename = os.path.join(output_folder, f"High_Criticality_Issues_{timestamp}.xlsx")
+
+    #     # Save to Excel
+    #     filtered_df.to_excel(filename, index=False)
+    #     print(f"[LOG] High criticality Excel file created: {filename}")
+    #     print(f"[LOG] Rows in high criticality file: {len(filtered_df)}")
+
+    #     return filename
+
+    def create_issues_excel(self, output_folder):
+        """Create an Excel file with all rows, filtered columns (for both ABHL and IMGC)."""
+        print(f"[LOG] Creating issues Excel file for both ABHL and IMGC")
+        # Load config to get all columns
+        config_df = pd.read_excel(self.config_file)
+        all_columns = config_df.columns.tolist()
+
+        # Columns to exclude
+        exclude_keywords = ['Data Type', 'Field length', 'Primary Source Document', 'Secondary Source Document']
+        exclude_columns = [col for col in all_columns if any(key in col for key in exclude_keywords) or 'Description' in col]
+
+        # Columns to keep
+        keep_columns = [col for col in self.merged_df.columns if col not in exclude_columns]
+
+        # Filter DataFrame
+        filtered_df = self.merged_df[keep_columns]
+
+        # Create filename
+        filename = os.path.join(output_folder, "issues.xlsx")
+        filtered_df.to_excel(filename, index=False)
+        print(f"[LOG] Issues Excel file created: {filename}")
         return filename
 
-    def generate_abhl_email(self):
+    def _get_document_names_from_mapping(self, mapping_json_path):
+        with open(mapping_json_path, 'r') as f:
+            mapping = json.load(f)
+        return list(mapping.keys())
+
+    def generate_abhl_email(self, mapping_json_path):
         print(f"[LOG] Generating ABHL email (high criticality issues)")
+        print("[LOG] Loading major issues for ABHL email mapping JSON ", mapping_json_path  )
         major_issues = self.get_major_issues()
-        
+        loan_id = self._extract_loan_id()
+
+        doc_names = self._get_document_names_from_mapping(mapping_json_path)
+        num_docs = len(doc_names)
+        doc_list = '\n'.join([f"• {doc}" for doc in doc_names])
+
         if major_issues.empty:
-            body_content = "✅ Good news! No high criticality issues were found in the data extraction process.\n\nAll high criticality fields have consistent values across documents."
+            body_content = f"""Dear ABHFL Team,
+I hope this email finds you well.
+We are pleased to inform you that the documents shared to initiate the loan application have been successfully processed through our data extraction and quality check workflow.
+
+Quality Check Summary:
+• No discrepancies were identified
+• Data values are consistent across the submitted documents
+
+At this stage, no additional information or revised documents are required. However, we will keep you informed for any further inputs be needed during subsequent processing.
+
+Documents Processed
+A total of {num_docs} documents were received and processed, including:
+{doc_list}
+
+If you require any additional information or clarification, please feel free to reach out to us.
+Warm regards,
+IMGC Team
+________________________________________
+This is a system-generated email. Please do not reply to this message.
+________________________________________
+For Implementation Use Only
+"""
+            subject_hint = f"Loan ID: {loan_id} Loan Application Document Processing Update"
         else:
-            lines = ["🚨 CRITICAL DATA QUALITY ALERT\n"]
-            lines.append(f"We have identified {len(major_issues)} HIGH criticality issue(s) in the extracted data that require IMMEDIATE attention:\n")
-            
-            # Group issues by document to clearly identify which document has problems
-            document_issues = {}
-            
-            for idx, row in major_issues.iterrows():
-                field = row['Field Name']
-                docs = row['Document Sources'] if isinstance(row['Document Sources'], dict) else {}
-                values = docs.values() if docs else []
-                unique_values = set([str(v) for v in values if v not in [None, '', 'NOT FOUND', 'NO INSTRUCTION', 'nan', 'None']])
-                
-                if row['Preferred Value'] == 'None' or not unique_values:
-                    lines.append(f"\n❌ MISSING MANDATORY FIELD: '{field}'")
-                    lines.append(f"   ⚠️  This field is not found in ANY document")
-                    
-                elif len(unique_values) > 1:
-                    lines.append(f"\n❌ CONFLICTING VALUES: '{field}'")
-                    lines.append(f"   ⚠️  Different values found across documents:")
-                    
-                    # List each document with its value
-                    for doc, val in docs.items():
-                        if val not in [None, '', 'NOT FOUND', 'NO INSTRUCTION', 'nan', 'None']:
-                            lines.append(f"      • {doc}: '{val}'")
-                            
-                            # Track which documents have issues
-                            if doc not in document_issues:
-                                document_issues[doc] = []
-                            document_issues[doc].append(field)
-                else:
-                    lines.append(f"\n⚠️  FLAGGED ISSUE: '{field}'")
-                    lines.append(f"   Single value found but requires review: {', '.join(unique_values)}")
-            
-            # Add summary of problematic documents
-            if document_issues:
-                lines.append(f"\n{'='*70}")
-                lines.append("📋 PROBLEM SUMMARY BY DOCUMENT:")
-                lines.append(f"{'='*70}")
-                for doc, fields in document_issues.items():
-                    lines.append(f"\n📄 {doc}")
-                    lines.append(f"   Issues with {len(fields)} field(s): {', '.join(fields)}")
-            
-            lines.append(f"\n{'='*70}")
-            lines.append("⚠️ ACTION REQUIRED:")
-            lines.append("These high criticality fields must be resolved before proceeding with data integration.")
-            lines.append("Please review the attached Excel file for complete details and provide corrections.")
-            lines.append(f"{'='*70}")
-            
-            body_content = '\n'.join(lines)
-        
-        email = self.generate_email_with_gpt(
-            recipient="ABHL",
-            subject_hint=f"🚨 HIGH Criticality Data Issues Detected - {len(major_issues)} Issue(s)" if not major_issues.empty else "✅ Data Quality Check Passed",
-            body_content=body_content,
-            context="This email reports high criticality issues found during data extraction where values differ across source documents or mandatory fields are missing. An Excel attachment with the problematic data is included."
-        )
+            # Summarization report for major mismatches
+            summary_lines = [
+                f"Dear ABHFL Team,",
+                "I hope this email finds you well.",
+                "We have processed your documents, but major discrepancies were identified during our quality check.",
+                "",
+                "Quality Check Summary:",
+                f"• {len(major_issues)} major mismatches detected",
+                "• Revised documents or additional information may be required.",
+                "",
+                "Documents Processed",
+                f"A total of {num_docs} documents were received and processed, including:",
+                f"{doc_list}",
+                "",
+                "Please review the attached summarization report for details on the discrepancies.",
+                "If you require any additional information or clarification, please feel free to reach out to us.",
+                "Warm regards,",
+                "IMGC Team",
+                "________________________________________",
+                "This is a system-generated email. Please do not reply to this message.",
+                "________________________________________",
+                "For Implementation Use Only"
+            ]
+            body_content = '\n'.join(summary_lines)
+            subject_hint = f"Loan ID: {loan_id} Loan Application Document Processing Update - Major Discrepancies Found"
+
+        email = {
+            'subject': subject_hint,
+            'body': body_content
+        }
         print(f"[LOG] ABHL email generated")
         return email
 
-    def generate_imgc_email(self):
-        print(f"[LOG] Generating IMGC email (low criticality issues)")
+    def generate_imgc_email(self, mapping_json_path):
+        print(f"[LOG] Generating IMGC email (criticality analysis)")
+        loan_id = self._extract_loan_id()
+        print("IMGC Loan Id:", loan_id)
+        doc_names = self._get_document_names_from_mapping(mapping_json_path)
+        num_docs = len(doc_names)
+        print("IMGC JSON path:",mapping_json_path)
+        print("IMGC doc_names:",doc_names)
+        doc_list = '\n'.join([f"• {doc}" for doc in doc_names])
+
+        # Extraction statistics
         total_fields = len(self.merged_df)
         all_issues = self.identify_issues()
-        low_issues = self.get_low_issues()
         total_issues = len(all_issues)
-        low_count = len(low_issues) if not low_issues.empty else 0
-        summary = f"""
-📊 DATA EXTRACTION SUMMARY
-{'='*70}
+        high_issues = all_issues[all_issues['Criticality'].astype(str).str.upper() == 'HIGH']
+        low_issues = all_issues[all_issues['Criticality'].astype(str).str.upper() != 'HIGH']
+        high_count = len(high_issues)
+        low_count = len(low_issues)
 
-Total Fields Processed: {total_fields}
-Total Issues Identified: {total_issues}
-Low Criticality Issues: {low_count}
-Data Extraction Status: ✅ Complete
-Data Cleaning Applied: ✅ Yes (spaces trimmed, special chars removed, case-normalized)
+        subject = f"ABHFL – Loan ID: {loan_id} – Document Data Extraction Report with Criticality Analysis"
+        body = f"""Dear IMGC Team,
+
+Subject - ABHFL – Loan ID: {loan_id} – Document Data Extraction Report with Criticality Analysis
+I hope you are doing well.
+A total of {num_docs} loan-related documents were received and successfully processed as part of this request. The documents include:
+{doc_list}
+Please find below a summary of the data extraction performed on the received documents, including overall extraction statistics and the identified high- and low-criticality issues:
+
+📊 Data Extraction Summary
+• Total Fields Processed: {total_fields}
+• Total Issues Identified: {total_issues}
+  o High Criticality Issues: {high_count}
+  o Low Criticality Issues: {low_count}
+
+The complete extracted Excel file has been attached for review and audit purposes.
+If any clarification, correction, or follow-up action is required, please coordinate internally as per the defined workflow.
+________________________________________
+This is a system-generated email. Please do not reply to this message.
 """
-        if not low_issues.empty:
-            all_issues_text = self.format_issues_for_email(low_issues)
-            body_content = f"""{summary}
 
-{'='*70}
-LOW CRITICALITY ISSUE DETAILS
-{'='*70}
-
-{all_issues_text}
-
-📎 ATTACHED: Complete extracted data for your records.
-"""
-        else:
-            body_content = f"""{summary}
-
-✅ EXCELLENT! All data has been extracted successfully with no low criticality inconsistencies found.
-All fields have consistent values across all source documents.
-📎 ATTACHED: Complete extracted data for your records.
-"""
-        email = self.generate_email_with_gpt(
-            recipient="IMGC",
-            subject_hint=f"📊 Data Extraction Report - {low_count} Low Criticality Issue(s) Found",
-            body_content=body_content,
-            context="This email provides a report of all extracted data including details of all low criticality issues found after data cleaning and normalization."
-        )
+        email = {
+            'subject': subject,
+            'body': body
+        }
         print(f"[LOG] IMGC email generated")
         return email
 
@@ -504,14 +538,19 @@ All fields have consistent values across all source documents.
         
         # Generate ABHL email
         print("📧 Generating ABHL email (High Criticality Issues)...")
-        abhl_email = self.generate_abhl_email()
+        mapping_json=os.path.join(output_dir, f"document_column_mapping.json")
+        abhl_email = self.generate_abhl_email(mapping_json)
         abhl_file = f"{output_dir}/email_to_ABHL.txt"
         self.save_email_to_file(abhl_email, abhl_file)
         
-        # Create high criticality Excel attachment for ABHL
-        print("📊 Creating high criticality Excel file for ABHL...")
-        abhl_attachment = self.create_high_criticality_excel(output_dir)
+        # # Create high criticality Excel attachment for ABHL
+        # print("📊 Creating high criticality Excel file for ABHL...")
+        # abhl_attachment = self.create_high_criticality_excel(output_dir)
         
+        # Create issues Excel attachment for both ABHL and IMGC
+        print("📊 Creating issues Excel file for both ABHL and IMGC...")
+        issues_attachment = self.create_issues_excel(output_dir)
+
         # Send ABHL email with attachment
         abhl_sent = False
         if send_emails and self.recipients.get('ABHL'):
@@ -520,31 +559,49 @@ All fields have consistent values across all source documents.
                 to_email=self.recipients['ABHL'],
                 subject=abhl_email['subject'],
                 body=abhl_email['body'],
-                attachment_path=abhl_attachment
+                attachment_path=issues_attachment
             )
+
+        # # Send IMGC email with the same attachment
+        # imgc_sent = False
+        # if send_emails and self.recipients.get('IMGC'):
+        #     print(f"\n📤 Sending email to IMGC ({self.recipients['IMGC']})...")
+        #     imgc_sent = self.send_email(
+        #         to_email=self.recipients['IMGC'],
+        #         subject=imgc_email['subject'],
+        #         body=imgc_email['body'],
+        #         attachment_path=issues_attachment
+        #     )
         
         # Generate IMGC email
         print("\n📧 Generating IMGC email (Low Criticality Issues)...")
-        imgc_email = self.generate_imgc_email()
+        mapping_json=os.path.join(output_dir, f"document_column_mapping.json")
+        imgc_email = self.generate_imgc_email(mapping_json)
         imgc_file = f"{output_dir}/email_to_IMGC.txt"
         self.save_email_to_file(imgc_email, imgc_file)
         
-        # IMGC gets the full extraction results
-        extraction_attachment = self.extraction_file
+        print("[DEBUG] IMGC email body to be sent:\n", imgc_email['body'])
+        
+        # IMGC gets issues.xlsx and latest JSON
         imgc_sent = False
         if send_emails and self.recipients.get('IMGC'):
             print(f"\n📤 Sending email to IMGC ({self.recipients['IMGC']})...")
             json_candidates = []
             try:
-                extraction_dir = os.path.dirname(str(extraction_attachment))
-                json_candidates = glob.glob(os.path.join(extraction_dir, 'pas_field_map_*.json'))
+                extraction_dir = os.path.dirname(str(self.extraction_file))
+                json_candidates = glob.glob(os.path.join(extraction_dir, 'final_json_format_*.json'))
+                if not json_candidates:
+                    json_candidates = glob.glob(os.path.join(extraction_dir, 'pas_field_map_*.json'))
             except Exception:
                 json_candidates = []
 
             latest_json = max(json_candidates, key=os.path.getmtime) if json_candidates else None
-            attachments = [extraction_attachment]
+            attachments = [issues_attachment]
             if latest_json:
-                attachments.append(latest_json)
+                if os.path.basename(latest_json).lower().startswith('final_json_format_'):
+                    attachments.append(_ensure_txt_copy_for_attachment(latest_json))
+                else:
+                    attachments.append(latest_json)
             imgc_sent = self.send_email(
                 to_email=self.recipients['IMGC'],
                 subject=imgc_email['subject'],
@@ -557,14 +614,14 @@ All fields have consistent values across all source documents.
         print("SUMMARY")
         print("="*80)
         print(f"✅ ABHL Email: {abhl_file}")
-        if abhl_attachment:
-            print(f"   📎 Attachment: {abhl_attachment}")
+        if issues_attachment:
+            print(f"   📎 Attachment: {issues_attachment}")
         if send_emails:
             print(f"   {'✅ Sent' if abhl_sent else '❌ Not sent'} to {self.recipients.get('ABHL', 'N/A')}")
         print(f"✅ IMGC Email: {imgc_file}")
         if send_emails:
             print(f"   {'✅ Sent' if imgc_sent else '❌ Not sent'} to {self.recipients.get('IMGC', 'N/A')}")
-        print(f"   📎 Attachment: {extraction_attachment}")
+        print(f"   📎 Attachment: {issues_attachment}")
         print("="*80 + "\n")
         
         return {
@@ -572,25 +629,40 @@ All fields have consistent values across all source documents.
             'imgc_email': imgc_email,
             'abhl_file': abhl_file,
             'imgc_file': imgc_file,
-            'abhl_attachment': abhl_attachment,
-            'extraction_attachment': extraction_attachment,
+            'abhl_attachment': issues_attachment,            
             'abhl_sent': abhl_sent,
             'imgc_sent': imgc_sent
         }
 
+    def _extract_loan_id(self):
+        """
+        Extracts the loan ID from the extraction file path or from the merged DataFrame.
+        Returns 'Unknown' if not found.
+        """
+        import re
+        # Try to extract from extraction_file path
+        if hasattr(self, 'extraction_file'):
+            match = re.search(r'(\d{9,})', str(self.extraction_file))
+            if match:
+                return match.group(1)
+        # Try to extract from merged_df
+        if hasattr(self, 'merged_df') and 'Loan ID' in self.merged_df.columns:
+            return str(self.merged_df['Loan ID'].iloc[0])
+        return "Unknown"
+
 def main():
+    import sys
     from pathlib import Path
-    print("[LOG] Starting main workflow")
-    base_dir = Path("email_attachments")
-    if not base_dir.exists():
-        print("[ERROR] email_attachments folder not found.")
-        return
-    for folder in base_dir.glob("*/"):
-        for subfolder in folder.glob("*/"):
-            extraction_file = subfolder / "extraction_results.xlsx"
-            print(f"\n[LOG] Processing folder: {subfolder}")
-            if extraction_file.exists():
-                process_extraction_results(extraction_file, subfolder)
+
+    # Use the current working directory as the output folder
+    output_folder = Path.cwd()
+    extraction_file = output_folder / "extraction_results.xlsx"
+
+    print(f"[LOG] Processing only current folder: {output_folder}")
+    if extraction_file.exists():
+        process_extraction_results(extraction_file, output_folder)
+    else:
+        print(f"[ERROR] extraction_results.xlsx not found in {output_folder}")
 
 def process_extraction_results(extraction_file, output_folder):
     import pandas as pd
