@@ -672,13 +672,14 @@ def extract_fields_with_intelligent_selection(
         return {}, matched_column
     
     print(f"  ➤ Extracting fields using column: {matched_column} ({len(fields_json)} fields)")
-    # if logger:
-    #     logger.info(f"len(document_text): {len(document_text)}")
-    #     logger.info(f"document_text[:500]: {document_text[:500]}")
-    #     logger.info(f"MAX_DOCUMENT_CHARS: {MAX_DOCUMENT_CHARS}")
-    # Truncate document if too long
-    # if len(document_text) > MAX_DOCUMENT_CHARS:
-    #     document_text = document_text[:MAX_DOCUMENT_CHARS] + "\n...[Document truncated]"
+    if logger:
+        logger.info(f"Processing document with matched column: {matched_column}")
+        logger.info(f"len(document_text): {len(document_text)}") 
+        logger.info(f"MAX_DOCUMENT_CHARS: {MAX_DOCUMENT_CHARS}")
+        
+    #Truncate document if too long
+    if len(document_text) > MAX_DOCUMENT_CHARS:
+        document_text = document_text[:MAX_DOCUMENT_CHARS] + "\n...[Document truncated]"
     
     prompt = f"""You are a data extraction assistant. Extract the following fields from the document.
 
@@ -1147,7 +1148,91 @@ class EmailAgentWithExtraction:
                 self.logger.info(f"    [ATTACHMENT] {filename}")
         
         return attachments
+    
+    ################################
+    def add_mismatch_column_with_llm(self,extraction_results_path, mapping_json_path):
+        """
+        Adds a 'MISMATCH' column to the extraction results Excel file.
+        For each row, if there is a discrepancy between not-null values in the mapped document columns,
+        a short description is generated using Azure OpenAI.
+        """
+        # Load extraction results
+        self.logger.info(f"Loading extraction results from: {extraction_results_path}")
+        self.logger.info(f"Loading mapping from: {mapping_json_path}")
+        df = pd.read_excel(extraction_results_path)
+        self.logger.info(f"Inside add_mismatch_column_with_llm",df.columns)
+        #rint("Inside add_mismatch_column_with_llm",df.columns)
+        # Load mapping JSON
+        with open(mapping_json_path, 'r', encoding='utf-8') as f:
+            mapping = json.load(f)
+        doc_columns = list(mapping.keys())
+        self.logger.info(f"doc_columns: {doc_columns}")
+        # Only keep columns that are in the mapping and not null in the DataFrame
+        relevant_cols = [os.path.splitext(col)[0] for col in doc_columns if os.path.splitext(col)[0] in df.columns]
 
+        # Prepare rows for LLM
+        mismatch_descriptions = []
+        client = AzureOpenAI(
+            azure_endpoint="https://qc-tspl-dau-mr.openai.azure.com/",
+            api_key="DvskuzopcDYytzJygTQiCl1ikUiT8513H8vfpIwVPZPOnfeHCdZ1JQQJ99BEACHYHv6XJ3w3AAABACOGprIt",
+            api_version="2025-01-01-preview",
+        )
+
+        for idx, row in df.iterrows():
+            print("Inside row:",idx)
+            print("relevant_cols:",relevant_cols)
+            values = {col: str(row[col]) for col in relevant_cols if pd.notna(row[col]) and str(row[col]).strip()}
+            unique_values = set(values.values())
+            print("values:",values)
+            print("unique_values:",unique_values)
+
+            if len(unique_values) <= 1:
+                mismatch_descriptions.append("")
+                self.logger.info(f"No mismatch found in row {idx}, skipping LLM call.")
+                continue
+
+            # Prepare prompt for LLM
+            prompt = (
+                "You are a data quality assistant. Given the following extracted values for the same field from different documents, "
+                "identify if there is a mismatch. If so, write a short description of the discrepancy. "
+                "If not, return an empty string.\n\n"
+                f"Values:\n{json.dumps(values, indent=2)}"
+            )
+
+            try:
+                completion = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a data quality assistant. Return only a short description of the mismatch, or an empty string if there is no issue."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_tokens=128,
+                    temperature=0.0,
+                    response_format={"type": "text"}
+                )
+                result_text = completion.choices[0].message.content.strip()
+                print(result_text)
+                mismatch_descriptions.append(result_text)
+            except Exception as e:
+                mismatch_descriptions.append(f"LLM error: {e}")
+        self.logger.info(f"Adding MISMATCH column to DataFrame",mismatch_descriptions)
+        df['MISMATCH'] = mismatch_descriptions
+
+        # Save back to Excel (overwrite or new file as needed)
+        output_path = extraction_results_path.replace('.xlsx', '_with_mismatch.xlsx')
+        df.to_excel(output_path, index=False)
+        print(f"✓ MISMATCH column added and saved to: {output_path}")
+        return output_path
+
+    ################################
+    
+    
     def run_field_extraction(self, folder_path):
         """Run field extraction on all documents in the folder"""
         try:
@@ -1195,6 +1280,17 @@ class EmailAgentWithExtraction:
                     self.logger.info(f"    [EXTRACTION] Skipping {doc_file} (not enough content)")
                     continue
                 
+                # Remove unnecessary newlines from document_text
+                cleaned_text = ' '.join(document_text.split())
+
+                # Write to a .txt file in the current folder
+                with open("document_txt.txt", "w", encoding="utf-8") as f:
+                    f.write(cleaned_text)
+
+                # Print the total length
+                print("Total length:", len(cleaned_text))
+                document_text = cleaned_text
+                
                 # Extract fields using the matched column
                 extracted_data, _ = extract_fields_with_intelligent_selection(
                     document_text=document_text,
@@ -1210,11 +1306,13 @@ class EmailAgentWithExtraction:
                     all_results[doc_name] = extracted_data
                     column_selections[doc_name] = matched_column
                     self.logger.info(f"    [EXTRACTION] ✓ Extracted {len(extracted_data)} fields using column: {matched_column}")
+            
             # Save results
             if all_results:
                 print(all_results)
                 output_path = os.path.join(folder_path, OUTPUT_FILENAME)
                 merge_results_to_excel(all_results, self.pas_fields, output_path, column_selections)
+                self.add_mismatch_column_with_llm(output_path, os.path.join(folder_path, 'document_column_mapping.json'))
                 self.logger.info(f"  [EXTRACTION] Results saved to {output_path}")
                 self.run_email_generation(folder_path, output_path)  ##Added by AP
             else:
