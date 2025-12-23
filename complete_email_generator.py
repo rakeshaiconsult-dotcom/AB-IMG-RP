@@ -505,19 +505,23 @@ For Implementation Use Only
         high_count = len(high_issues)
         low_count = len(low_issues)
 
-        subject = f"ABHFL – Loan ID: {loan_id} – Document Data Extraction Report with Criticality Analysis"
+        total_captured_fields = 0
+        if 'Final Data for PAS System' in self.merged_df.columns:
+            final_data_col = self.merged_df['Final Data for PAS System']
+            valid_mask = final_data_col.notna() & final_data_col.astype(str).str.strip().ne('')
+            total_captured_fields = int(valid_mask.sum())
+
+        subject = f"ABHFL – Loan ID: {loan_id} – Document Data Extraction Report"
         body = f"""Dear IMGC Team,
 
 I hope you are doing well.
 A total of {num_docs} loan-related documents were received and successfully processed as part of this request. The documents include:
 {doc_list}
-Please find below a summary of the data extraction performed on the received documents, including overall extraction statistics and the identified high- and low-criticality issues:
+Please find below a summary of the data extraction performed on the received documents, including overall extraction statistics:
 
 📊 Data Extraction Summary
 • Total Fields Processed: {total_fields}
-• Total Issues Identified: {total_issues}
-  o High Criticality Issues: {high_count}
-  o Low Criticality Issues: {low_count}
+• Total Fields Captured : {total_captured_fields}
 
 The complete extracted Excel file has been attached for review and audit purposes.
 If any clarification, correction, or follow-up action is required, please coordinate internally as per the defined workflow.
